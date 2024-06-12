@@ -2,21 +2,41 @@ pipeline {
     agent any
 
     stages {
-        stage('Deploy To Kubernetes') {
+        stage('Deploy to K8') {
             steps {
-                withKubeCredentials(kubectlCredentials: [[caCertificate: '', clusterName: 'EKS-1', contextName: '', credentialsId: 'k8-token', namespace: 'webapps', serverUrl: 'https://9F39F577334FF23706994135261985F2.gr7.ap-south-1.eks.amazonaws.com']]) {
-                    sh "kubectl apply -f deployment-service.yml"
-                    
+                withCredentials([file(credentialsId: 'k8-ca-cert', variable: 'CA_CERT_FILE'), string(credentialsId: 'k8-token-mission', variable: 'K8_TOKEN')]) {
+                    script {
+                        sh '''
+                            export KUBECONFIG=$(mktemp)
+                            kubectl config set-cluster kubernetes --certificate-authority=$CA_CERT_FILE --server=https://kubernetes.docker.internal:6443
+                            kubectl config set-credentials admin --token=$K8_TOKEN
+                            kubectl config set-context default --cluster=kubernetes --user=admin
+                            kubectl config use-context default
+                            kubectl apply -f deployment-service.yml -n webapps
+                            sleep 60
+                        '''
+                    }
                 }
             }
         }
-        
-        stage('verify Deployment') {
+
+        stage('Verify Deployment') {
             steps {
-                withKubeCredentials(kubectlCredentials: [[caCertificate: '', clusterName: 'EKS-1', contextName: '', credentialsId: 'k8-token', namespace: 'webapps', serverUrl: 'https://9F39F577334FF23706994135261985F2.gr7.ap-south-1.eks.amazonaws.com']]) {
-                    sh "kubectl get svc -n webapps"
+                withCredentials([file(credentialsId: 'k8-ca-cert', variable: 'CA_CERT_FILE'), string(credentialsId: 'k8-token-mission', variable: 'K8_TOKEN')]) {
+                    script {
+                        sh '''
+                            export KUBECONFIG=$(mktemp)
+                            kubectl config set-cluster kubernetes --certificate-authority=$CA_CERT_FILE --server=https://kubernetes.docker.internal:6443
+                            kubectl config set-credentials admin --token=$K8_TOKEN
+                            kubectl config set-context default --cluster=kubernetes --user=admin
+                            kubectl config use-context default
+                            kubectl get pods -n webapps
+                            kubectl get svc -n webapps
+                        '''
+                    }
                 }
             }
         }
+    
     }
 }
